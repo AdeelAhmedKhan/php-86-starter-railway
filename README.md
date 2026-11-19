@@ -1,21 +1,19 @@
 # PHP 8.6 Starter
 
-PHP **8.6.0** on Railway: compiled from the official php.net source,
-served by nginx + php-fpm as a non-root user, with a health endpoint
-that tells the truth.
+PHP **8.6.0** on Railway: the official `php:8.6.0-fpm-alpine`
+image, pinned by tag and digest, served by nginx + php-fpm as a
+non-root user, with a health endpoint that tells the truth.
 
 ## Why this exists
 
-PHP 8.6.0 was released on 19 November 2026. On release day there was
-no other PHP 8.6 template on Railway, and Docker Hub's official `php`
-image had not published final 8.6.0 tags yet — so this starter does
-not wait for either. Its Dockerfile downloads the official
-`php-8.6.0.tar.xz` from php.net, verifies the sha256 php.net
-publishes for it, and compiles exactly that release.
-
-When the official `php:8.6.x-fpm-alpine` image lands, the build stage
-will be swapped for it. The application, nginx configuration, and
-entrypoint stay the same.
+PHP 8.6.0 was released on 19 November 2026, and on release day
+there was no other PHP 8.6 template on Railway. This starter
+shipped the same day, at first compiling PHP from the official
+php.net source because Docker Hub had not published final 8.6.0
+tags yet. Those tags have since landed, so the build now uses
+the official image, pinned by tag and digest: deploys take an
+image pull instead of a source compile, and patch releases
+become a one-line bump in the Dockerfile.
 
 ## What you get
 
@@ -50,16 +48,20 @@ no `DATABASE_URL` is set, `ok` only after a real query succeeds, and
 
 ## Trade-offs, stated plainly
 
-- **First deploys build PHP from source** and take several minutes
-  longer than an image pull. That is the cost of shipping on release
-  day; it disappears when the template swaps to the official image.
+- The image is pinned to PHP 8.6.0 by digest, so patch releases
+  (8.6.1 and later) arrive only when the pin is bumped in the
+  Dockerfile. That is deliberate: a redeploy never changes your
+  PHP version silently. Watch the repo if you want the bumps.
 - The demo app is a starting point, not a framework. For Laravel,
   see the Laravel AI SDK Starter template instead.
 
 ## Verification
 
-- Source tarball sha256 verified against php.net's downloads page.
-- PHP 8.6.0 compiled from this source locally and the demo endpoints
-  exercised against the compiled runtime before publishing.
-- Live Railway deploy: see the template page for the current status;
-  this README is updated when a live deploy has been verified.
+- The image digest in the Dockerfile is the amd64 digest Docker
+  Hub publishes for `php:8.6.0-fpm-alpine`.
+- Before the image swap, this starter ran PHP 8.6.0 compiled from
+  the php.net tarball (sha256 verified against php.net), and the
+  demo endpoints were exercised against that compiled runtime.
+- Live Railway deploy: see the template page for the current
+  status; this README is updated when a live deploy of the
+  current build has been verified.

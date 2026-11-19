@@ -9,14 +9,16 @@ Rules for anyone (human or agent) changing this template:
 - `/api/info` feature flags must be real runtime probes
   (`function_exists`, `class_exists`, `extension_loaded`), never
   hardcoded from the version string.
-- The PHP version is pinned twice: `PHP_VERSION` and `PHP_SHA256` in
-  the Dockerfile, the sha256 being the value php.net publishes on its
-  downloads page for that exact tarball. Never bump one without the
-  other, and never drop the checksum verification step.
-- When Docker Hub's official `php:8.6.x-fpm-alpine` image exists, the
-  from-source stage is replaced by it and this file's pinning rule
-  moves to the image tag + digest. The app, nginx config, and
-  entrypoint do not change in that swap.
+- The PHP version is pinned twice in the Dockerfile: the image tag
+  (`php:8.6.0-fpm-alpine`) and its amd64 digest (`@sha256:...`), the
+  digest being the value Docker Hub publishes for that tag. Never
+  bump one without the other, and verify the new digest on Docker
+  Hub before pushing.
+- History: on release day (2026-11-19) Docker Hub had no final
+  8.6.0 tags, so this starter originally compiled PHP from the
+  php.net tarball pinned by its sha256. The official tags landed
+  the same day and the build moved to the official image; the app,
+  nginx config, and entrypoint did not change in that swap.
 - The container runs as www-data. Nothing at runtime may write to
   /etc/nginx or /usr/local/etc; runtime writes go to /run/nginx.
 - OPcache is built into PHP 8.6. Do not add an opcache install step;

@@ -1,13 +1,15 @@
 # syntax=docker/dockerfile:1
-# PHP 8.6 starter — PHP 8.6.0 compiled from the official php.net source.
+# PHP 8.6 starter — the official php:8.6.0-fpm-alpine image, pinned by
+# tag AND digest, with nginx in front and php-fpm behind it.
 #
-# WHY FROM SOURCE (and not the official Docker image): PHP 8.6.0 went
-# GA on 2026-11-19, but Docker Hub's official `php` image had no final
-# 8.6.0 tags yet (only 8.6.0RC7 pre-releases). Rather than wait, this
-# Dockerfile compiles the official php.net release tarball, pinned by
-# version AND by the sha256 php.net publishes for it. When the
-# official `php:8.6.x-fpm-alpine` image lands, this file will be
-# swapped to it; the app, nginx, and entrypoint layers do not change.
+# HISTORY: this starter first shipped on 2026-11-19 compiling PHP
+# 8.6.0 from the official php.net tarball, because Docker Hub had no
+# final 8.6.0 tags on release day (only 8.6.0RC7). The official tags
+# landed the same day, so the from-source stage was retired: builds
+# drop from minutes of compiling to an image pull, and patch
+# releases (8.6.1, 8.6.2, ...) become a one-line tag + digest bump
+# in this file. The sha256 below is the amd64 image digest Docker
+# Hub publishes for the tag; verify it there before every bump.
 #
 # WHY php-fpm + nginx (and NEVER mod_php): the October 2026 php2shell
 # RCEs (CVE-2026-109618 / CVE-2026-109619, CVSS v4.0 9.2) are
@@ -20,94 +22,40 @@
 # binary, so there is no shared module. The settings in
 # docker/php/opcache.ini apply to the built-in extension.
 
-# ------------------------------------------------------------------
-# Stage 1 — build PHP 8.6.0 from the official source tarball.
-# ------------------------------------------------------------------
-FROM alpine:3.22 AS phpbuild
+FROM php:8.6.0-fpm-alpine@sha256:001767ab28523ebf2ff679d6529610be4cccb444e39ff5e0a71c5581636e7c73
 
-ARG PHP_VERSION=8.6.0
-ARG PHP_SHA256=5f84beaa3d763aee1e4feed99bf54ec692c383b322e25626807b589238c3a087
-
-RUN apk add --no-cache \
-        build-base autoconf pkgconf bison re2c \
-        curl xz linux-headers \
-        libxml2-dev openssl-dev sqlite-dev postgresql-dev \
-        icu-dev libzip-dev oniguruma-dev curl-dev libsodium-dev \
-        zlib-dev
-
-WORKDIR /usr/src
-RUN curl -fsSL -o php.tar.xz "https://www.php.net/distributions/php-${PHP_VERSION}.tar.xz" \
-    && echo "${PHP_SHA256}  php.tar.xz" | sha256sum -c - \
-    && mkdir -p php-src \
-    && tar -xf php.tar.xz -C php-src --strip-components=1 \
-    && rm php.tar.xz
-
-WORKDIR /usr/src/php-src
-RUN ./configure \
-        --prefix=/usr/local \
-        --with-config-file-path=/usr/local/etc/php \
-        --with-config-file-scan-dir=/usr/local/etc/php/conf.d \
-        --enable-fpm \
-        --with-fpm-user=www-data \
-        --with-fpm-group=www-data \
-        --disable-cgi \
-        --enable-mbstring \
-        --enable-intl \
-        --enable-bcmath \
-        --enable-pcntl \
-        --enable-sockets \
-        --with-pdo-pgsql \
-        --with-pdo-sqlite \
-        --with-sqlite3 \
-        --with-openssl \
-        --with-curl \
-        --with-zip \
-        --with-zlib \
-        --with-sodium \
-    && make -j"$(nproc)" \
-    && make install \
-    && cp php.ini-production /usr/local/etc/php/php.ini
-
-# Strip in its own step. A blanket "|| true" on the compile chain
-# once masked a failed make (ext/sockets needed the kernel headers
-# in linux-headers, added above) and shipped an image with no
-# php-fpm at all — live tests 2 and 3, 2026-11-19.
-RUN strip /usr/local/bin/php /usr/local/sbin/php-fpm || true
-
-# Fail the BUILD, not the deploy, if FPM did not install where the
-# runtime stage and entrypoint expect it (live test 2: the deploy
-# crashed with "php-fpm: not found" and no build-side evidence).
-RUN test -x /usr/local/sbin/php-fpm && /usr/local/bin/php -v | head -1
-
-# ------------------------------------------------------------------
-# Stage 2 — runtime: the compiled PHP + nginx. No compilers, no
-# source, no build tools in the final image. Runs as non-root.
-# ------------------------------------------------------------------
-FROM alpine:3.22 AS runtime
-
-# Runtime libraries only — the matching -dev packages stay behind in
-# the build stage.
-RUN apk add --no-cache \
-        nginx \
-        libxml2 openssl sqlite-libs libpq icu-libs libzip \
-        oniguruma libcurl libsodium zlib ca-certificates \
+# Extensions the source build compiled in, now installed the
+# official-image way. Runtime libraries stay; the -dev packages and
+# build tools are removed in the same layer. linux-headers is
+# included because ext/sockets needs kernel headers to compile on
+# Alpine (that omission once sank the from-source build).
+RUN apk add --no-cache --virtual .runtime-libs \
+        nginx icu-libs libpq sqlite-libs libzip oniguruma libcurl libsodium ca-certificates \
+    && apk add --no-cache --virtual .build-deps \
+        $PHPIZE_DEPS linux-headers icu-dev postgresql-dev sqlite-dev libzip-dev oniguruma-dev curl-dev \
+    && docker-php-ext-install -j"$(nproc)" \
+        pdo_pgsql pdo_sqlite sqlite3 intl mbstring zip bcmath pcntl sockets curl \
+    && apk del .build-deps \
     && rm -rf /var/cache/apk/*
 
-# The www-data user the official php images use (uid/gid 82). Alpine's
-# base image already ships www-data with those ids, so create only
-# what is missing — the first live Railway build failed with
-# "addgroup: group 'www-data' in use" on the unguarded version.
-RUN (grep -q '^www-data:' /etc/group || addgroup -S -g 82 www-data) \
-    && (grep -q '^www-data:' /etc/passwd || adduser -S -u 82 -G www-data www-data)
+# Fail the BUILD, not the deploy, if the runtime is not exactly
+# what this starter promises: php-fpm present, PHP 8.6.0, and every
+# extension the README lists actually loaded.
+RUN test -x /usr/local/sbin/php-fpm \
+    && php -v | head -1 | grep -q 'PHP 8.6.0' \
+    && for ext in pdo_pgsql pdo_sqlite sqlite3 intl mbstring zip bcmath pcntl sockets curl openssl sodium zlib opcache; do \
+        php -m | grep -qi "^${ext}$" || { echo "missing extension: ${ext}"; exit 1; }; \
+    done
 
-COPY --from=phpbuild /usr/local /usr/local
 COPY --from=composer:2.9.8 /usr/bin/composer /usr/bin/composer
 
-# Same assertion on the runtime side of the COPY.
-RUN test -x /usr/local/sbin/php-fpm
+# Production php.ini as the base; the image ships it in PHP_INI_DIR.
+RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
-# php-fpm: main config (global) + pool, both provided by this starter
-# because a source build ships neither in usable form.
+# php-fpm: this starter's own main config + pool. The image's
+# shipped pool files are removed first — its www.conf would define
+# a second [www] pool and collide with ours.
+RUN rm -f /usr/local/etc/php-fpm.d/*.conf
 COPY docker/php/php-fpm-main.conf /usr/local/etc/php-fpm.conf
 COPY docker/php/php-fpm.conf /usr/local/etc/php-fpm.d/zz-app.conf
 
@@ -124,7 +72,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 WORKDIR /app
 COPY --chown=www-data:www-data public ./public
 
-# Writable dirs for a non-root runtime user. /run/nginx holds the
+# Writable dirs for the non-root runtime user. /run/nginx holds the
 # rendered nginx config and both pid files (see entrypoint.sh).
 RUN mkdir -p /var/log/nginx /var/lib/nginx \
         /var/lib/nginx/tmp/client_body /var/lib/nginx/tmp/proxy \
