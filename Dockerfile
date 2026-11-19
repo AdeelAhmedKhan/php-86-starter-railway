@@ -69,6 +69,11 @@ RUN ./configure \
     && cp php.ini-production /usr/local/etc/php/php.ini \
     && strip /usr/local/bin/php /usr/local/sbin/php-fpm || true
 
+# Fail the BUILD, not the deploy, if FPM did not install where the
+# runtime stage and entrypoint expect it (live test 2: the deploy
+# crashed with "php-fpm: not found" and no build-side evidence).
+RUN test -x /usr/local/sbin/php-fpm && /usr/local/bin/php -v | head -1
+
 # ------------------------------------------------------------------
 # Stage 2 — runtime: the compiled PHP + nginx. No compilers, no
 # source, no build tools in the final image. Runs as non-root.
@@ -92,6 +97,9 @@ RUN (grep -q '^www-data:' /etc/group || addgroup -S -g 82 www-data) \
 
 COPY --from=phpbuild /usr/local /usr/local
 COPY --from=composer:2.9.8 /usr/bin/composer /usr/bin/composer
+
+# Same assertion on the runtime side of the COPY.
+RUN test -x /usr/local/sbin/php-fpm
 
 # php-fpm: main config (global) + pool, both provided by this starter
 # because a source build ships neither in usable form.

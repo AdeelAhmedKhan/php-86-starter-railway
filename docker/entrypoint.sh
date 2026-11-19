@@ -19,5 +19,8 @@ sed "s|\${PORT}|${PORT}|g" /etc/nginx/nginx.conf.template > /run/nginx/nginx.con
 # relative includes (fastcgi_params) still resolve against the
 # compiled prefix /etc/nginx, and mime.types is included by absolute
 # path, so nothing else moves.
-php-fpm -D
+# php-fpm is called by ABSOLUTE path: live test 2 failed with
+# "php-fpm: not found" on the bare name, so PATH is not trusted here.
+# The echo lines stay in the log as evidence of what the image holds.
+/usr/local/sbin/php-fpm -D
 exec nginx -c /run/nginx/nginx.conf -g 'daemon off;'
