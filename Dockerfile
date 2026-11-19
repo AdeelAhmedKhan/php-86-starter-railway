@@ -84,10 +84,11 @@ RUN apk add --no-cache \
     && rm -rf /var/cache/apk/*
 
 # The www-data user the official php images use (uid/gid 82). Alpine's
-# busybox addgroup/adduser provide this; slim images that lack them
-# would need a numeric USER instead.
-RUN addgroup -S -g 82 www-data \
-    && adduser -S -u 82 -G www-data www-data
+# base image already ships www-data with those ids, so create only
+# what is missing — the first live Railway build failed with
+# "addgroup: group 'www-data' in use" on the unguarded version.
+RUN (grep -q '^www-data:' /etc/group || addgroup -S -g 82 www-data) \
+    && (grep -q '^www-data:' /etc/passwd || adduser -S -u 82 -G www-data www-data)
 
 COPY --from=phpbuild /usr/local /usr/local
 COPY --from=composer:2.9.8 /usr/bin/composer /usr/bin/composer
