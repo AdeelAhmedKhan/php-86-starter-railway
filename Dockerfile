@@ -29,12 +29,16 @@ FROM php:8.6.0-fpm-alpine@sha256:001767ab28523ebf2ff679d6529610be4cccb444e39ff5e
 # build tools are removed in the same layer. linux-headers is
 # included because ext/sockets needs kernel headers to compile on
 # Alpine (that omission once sank the from-source build).
+# The sqlite3 extension is deliberately NOT in the list: its PHP
+# 8.6 source ships config0.m4 instead of config.m4 and
+# docker-php-ext-install fails on it (live test 5, 2026-11-20).
+# pdo_sqlite is the SQLite access this starter promises.
 RUN apk add --no-cache --virtual .runtime-libs \
         nginx icu-libs libpq sqlite-libs libzip oniguruma libcurl libsodium ca-certificates \
     && apk add --no-cache --virtual .build-deps \
         $PHPIZE_DEPS linux-headers icu-dev postgresql-dev sqlite-dev libzip-dev oniguruma-dev curl-dev \
     && docker-php-ext-install -j"$(nproc)" \
-        pdo_pgsql pdo_sqlite sqlite3 intl mbstring zip bcmath pcntl sockets curl \
+        pdo_pgsql pdo_sqlite intl mbstring zip bcmath pcntl sockets curl \
     && apk del .build-deps \
     && rm -rf /var/cache/apk/*
 
@@ -43,7 +47,7 @@ RUN apk add --no-cache --virtual .runtime-libs \
 # extension the README lists actually loaded.
 RUN test -x /usr/local/sbin/php-fpm \
     && php -v | head -1 | grep -q 'PHP 8.6.0' \
-    && for ext in pdo_pgsql pdo_sqlite sqlite3 intl mbstring zip bcmath pcntl sockets curl openssl sodium zlib opcache; do \
+    && for ext in pdo_pgsql pdo_sqlite intl mbstring zip bcmath pcntl sockets curl openssl sodium zlib opcache; do \
         php -m | grep -qi "^${ext}$" || { echo "missing extension: ${ext}"; exit 1; }; \
     done
 
