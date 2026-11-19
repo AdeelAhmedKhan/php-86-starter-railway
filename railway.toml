@@ -1,0 +1,30 @@
+# Railway Config as Code — app service.
+# https://docs.railway.com/config-as-code/reference
+#
+# Template wiring (done in the Railway dashboard / Template Composer,
+# not in this file):
+#   - Optional: add a Postgres service and set
+#     DATABASE_URL=${{Postgres.DATABASE_URL}} on this service.
+#     /api/health then reports the database as "ok"; without it the
+#     starter runs fine and reports "not_configured".
+#   - Healthcheck must return HTTP 200 directly (no redirect).
+#
+# WHY builder = "DOCKERFILE": Railpack (the default builder) resolves
+# PHP versions fuzzily and documents no exact-patch pin. The
+# Dockerfile compiles the exact PHP 8.6.0 release from the official
+# php.net source tarball, verified by its published sha256. Railway
+# auto-detects a Dockerfile at the repo root; this setting makes it
+# explicit.
+
+[build]
+builder = "DOCKERFILE"
+
+[deploy]
+startCommand = "/usr/local/bin/entrypoint.sh"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+# No PORT setting needed: Railway injects $PORT at runtime and the
+# entrypoint binds nginx to it.
