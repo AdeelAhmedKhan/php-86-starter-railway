@@ -44,12 +44,16 @@ RUN apk add --no-cache --virtual .runtime-libs \
 
 # Fail the BUILD, not the deploy, if the runtime is not exactly
 # what this starter promises: php-fpm present, PHP 8.6.0, and every
-# extension the README lists actually loaded.
+# extension the README lists actually loaded. OPcache is checked
+# under the name php -m actually prints, "Zend OPcache" — the
+# plain name failed live test 6 while OPcache was built in all
+# along.
 RUN test -x /usr/local/sbin/php-fpm \
     && php -v | head -1 | grep -q 'PHP 8.6.0' \
-    && for ext in pdo_pgsql pdo_sqlite intl mbstring zip bcmath pcntl sockets curl openssl sodium zlib opcache; do \
+    && for ext in pdo_pgsql pdo_sqlite intl mbstring zip bcmath pcntl sockets curl openssl sodium zlib; do \
         php -m | grep -qi "^${ext}$" || { echo "missing extension: ${ext}"; exit 1; }; \
-    done
+    done \
+    && php -m | grep -q '^Zend OPcache$'
 
 COPY --from=composer:2.9.8 /usr/bin/composer /usr/bin/composer
 
