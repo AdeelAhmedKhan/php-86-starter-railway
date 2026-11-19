@@ -30,7 +30,7 @@ ARG PHP_SHA256=5f84beaa3d763aee1e4feed99bf54ec692c383b322e25626807b589238c3a087
 
 RUN apk add --no-cache \
         build-base autoconf pkgconf bison re2c \
-        curl xz \
+        curl xz linux-headers \
         libxml2-dev openssl-dev sqlite-dev postgresql-dev \
         icu-dev libzip-dev oniguruma-dev curl-dev libsodium-dev \
         zlib-dev
@@ -66,8 +66,13 @@ RUN ./configure \
         --with-sodium \
     && make -j"$(nproc)" \
     && make install \
-    && cp php.ini-production /usr/local/etc/php/php.ini \
-    && strip /usr/local/bin/php /usr/local/sbin/php-fpm || true
+    && cp php.ini-production /usr/local/etc/php/php.ini
+
+# Strip in its own step. A blanket "|| true" on the compile chain
+# once masked a failed make (ext/sockets needed the kernel headers
+# in linux-headers, added above) and shipped an image with no
+# php-fpm at all — live tests 2 and 3, 2026-11-19.
+RUN strip /usr/local/bin/php /usr/local/sbin/php-fpm || true
 
 # Fail the BUILD, not the deploy, if FPM did not install where the
 # runtime stage and entrypoint expect it (live test 2: the deploy
