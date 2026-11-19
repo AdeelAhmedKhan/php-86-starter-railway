@@ -62,6 +62,13 @@ no `DATABASE_URL` is set, `ok` only after a real query succeeds, and
 - Before the image swap, this starter ran PHP 8.6.0 compiled from
   the php.net tarball (sha256 verified against php.net), and the
   demo endpoints were exercised against that compiled runtime.
-- Live Railway deploy: see the template page for the current
-  status; this README is updated when a live deploy of the
-  current build has been verified.
+- **Live Railway deploy VERIFIED on 2026-11-20**: a fresh deploy
+  of this template went from build start to a passing healthcheck
+  in about 1 minute 48 seconds. `/api/health` returned
+  `{"status":"ok","php":"8.6.0","opcache":true,"database":"not_configured"}`,
+  `/api/info` reported all four PHP 8.6 feature probes true, and
+  the status page loaded. The test project was deleted right
+  after verification. The database `ok` path (a live Postgres
+  attached over `DATABASE_URL`) is still untested for this
+  starter; the `error` path (unreachable database returns 503)
+  was verified against the earlier build.
